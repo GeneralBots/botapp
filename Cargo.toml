@@ -1,0 +1,42 @@
+[package]
+name = "botapp"
+version = "6.1.0"
+edition = "2021"
+description = "General Bots App - Tauri wrapper for desktop/mobile"
+license = "AGPL-3.0"
+
+[dependencies]
+# Core from botlib
+botlib = { path = "../botlib", features = ["http-client"] }
+
+# Tauri
+tauri = { version = "2", features = ["unstable"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+# Common
+anyhow = "1.0"
+dirs = "6.0"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.41", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Platform-specific tray
+[target.'cfg(unix)'.dependencies]
+ksni = { version = "0.2", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+trayicon = { version = "0.2", optional = true }
+image = "0.25"
+thiserror = "2.0"
+
+[features]
+default = ["desktop"]
+desktop = []
+desktop-tray = ["dep:ksni", "dep:trayicon"]
+
+[build-dependencies]
+tauri-build = "2"

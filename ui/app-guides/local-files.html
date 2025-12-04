@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Files - General Bots</title>
+    <style>
+        .local-files {
+            padding: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .guide-header {
+            margin-bottom: 2rem;
+        }
+
+        .guide-header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--fg, #333);
+        }
+
+        .guide-header p {
+            color: var(--fg-muted, #666);
+        }
+
+        .path-bar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: var(--bg-secondary, #f5f5f5);
+            border-radius: 8px;
+        }
+
+        .path-bar input {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border, #ddd);
+            border-radius: 4px;
+            font-family: monospace;
+            background: var(--bg, #fff);
+            color: var(--fg, #333);
+        }
+
+        .path-bar button {
+            padding: 0.5rem 1rem;
+            background: var(--primary, #0066cc);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .path-bar button:hover {
+            background: var(--primary-hover, #0055aa);
+        }
+
+        .file-list {
+            border: 1px solid var(--border, #ddd);
+            border-radius: 8px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            background: var(--bg, #fff);
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-light, #eee);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-item:hover {
+            background: var(--bg-hover, #f8f8f8);
+        }
+
+        .file-item.folder {
+            font-weight: 500;
+        }
+
+        .file-item .icon {
+            font-size: 1.25rem;
+            width: 24px;
+            text-align: center;
+        }
+
+        .file-item .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-item .size {
+            color: var(--fg-muted, #888);
+            font-size: 0.85rem;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .file-actions button {
+            padding: 0.5rem 1rem;
+            background: var(--bg-secondary, #f0f0f0);
+            color: var(--fg, #333);
+            border: 1px solid var(--border, #ddd);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .file-actions button:hover {
+            background: var(--bg-hover, #e8e8e8);
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: var(--fg-muted, #888);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--fg-muted, #888);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-guide local-files">
+        <header class="guide-header">
+            <h1>📁 Local Files</h1>
+            <p>Access and manage files on your device using native file system access.</p>
+        </header>
+
+        <section class="file-browser">
+            <div class="path-bar">
+                <button onclick="goUp()" title="Go up one level">⬆️</button>
+                <input type="text" id="currentPath" placeholder="Enter path..." onkeydown="if(event.key==='Enter')loadFiles()">
+                <button onclick="loadFiles()">Browse</button>
+                <button onclick="goHome()">🏠 Home</button>
+            </div>
+
+            <div class="file-list" id="fileList">
+                <div class="empty-state">
+                    <span class="icon">📂</span>
+                    <p>Click "Home" or enter a path to browse files</p>
+                </div>
+            </div>
+
+            <div class="file-actions">
+                <button onclick="createFolder()">📁 New Folder</button>
+                <button onclick="refreshFiles()">🔄 Refresh</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Check if running in Tauri
+        const isTauri = window.__TAURI__ !== undefined;
+
+        async function invoke(cmd, args) {
+            if (isTauri && window.__TAURI__.core) {
+                return await window.__TAURI__.core.invoke(cmd, args);
+            } else {
+                console.warn('Not running in Tauri - file operations unavailable');
+                throw new Error('Native file access requires the desktop app');
+            }
+        }
+
+        async function goHome() {
+            try {
+                const homePath = await invoke('get_home_dir', {});
+                document.getElementById('currentPath').value = homePath;
+                await loadFiles();
+            } catch (e) {
+                showError(e.message);
+            }
+        }
+
+        async function goUp() {
+            const pathInput = document.getElementById('currentPath');
+            const currentPath = pathInput.value;
+            if (!currentPath) return;
+
+            const parts = currentPath.split(/[/\\]/);
+            parts.pop();
+            if (parts.length > 0) {
+                pathInput.value = parts.join('/') || '/';
+                await loadFiles();
+            }
+        }
+
+        async function loadFiles() {
+            const pathInput = document.getElementById('currentPath');
+            const path = pathInput.value || '/';
+            const listEl = document.getElementById('fileList');
+
+            listEl.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const files = await invoke('list_files', { path });
+
+                if (files.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="empty-state">
+                            <span class="icon">📭</span>
+                            <p>This folder is empty</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                listEl.innerHTML = files.map(f => `
+                    <div class="file-item ${f.is_dir ? 'folder' : 'file'}"
+                         onclick="${f.is_dir ? `navigateTo('${f.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')` : ''}">
+                        <span class="icon">${f.is_dir ? '📁' : getFileIcon(f.name)}</span>
+                        <span class="name">${escapeHtml(f.name)}</span>
+                        <span class="size">${f.is_dir ? '' : formatSize(f.size)}</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">⚠️</span>
+                        <p>${escapeHtml(e.message || 'Failed to load files')}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function navigateTo(path) {
+            document.getElementById('currentPath').value = path;
+            loadFiles();
+        }
+
+        async function createFolder() {
+            const path = document.getElementById('currentPath').value;
+            if (!path) {
+                showError('Please navigate to a directory first');
+                return;
+            }
+
+            const name = prompt('Enter folder name:');
+            if (name) {
+                try {
+                    await invoke('create_folder', { path, name });
+                    await loadFiles();
+                } catch (e) {
+                    showError(e.message);
+                }
+            }
+        }
+
+        function refreshFiles() {
+            loadFiles();
+        }
+
+        function formatSize(bytes) {
+            if (bytes === null || bytes === undefined) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+            return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'pdf': '📕',
+                'doc': '📘', 'docx': '📘',
+                'xls': '📗', 'xlsx': '📗',
+                'ppt': '📙', 'pptx': '📙',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'svg': '🖼️',
+                'mp3': '🎵', 'wav': '🎵', 'flac': '🎵',
+                'mp4': '🎬', 'mkv': '🎬', 'avi': '🎬',
+                'zip': '📦', 'rar': '📦', 'tar': '📦', 'gz': '📦',
+                'js': '📜', 'ts': '📜', 'py': '📜', 'rs': '📜',
+                'html': '🌐', 'css': '🎨',
+                'json': '📋', 'xml': '📋', 'yaml': '📋', 'yml': '📋',
+                'txt': '📄', 'md': '📄',
+            };
+            return icons[ext] || '📄';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(message) {
+            alert('Error: ' + message);
+        }
+
+        // Auto-load home directory on init if in Tauri
+        if (isTauri) {
+            goHome();
+        }
+    </script>
+</body>
+</html>
