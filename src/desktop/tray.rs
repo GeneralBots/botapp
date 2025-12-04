@@ -2,6 +2,8 @@
 //!
 //! Provides system tray icon and menu for desktop platforms.
 
+#![allow(dead_code)] // Prepared for future use
+
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
