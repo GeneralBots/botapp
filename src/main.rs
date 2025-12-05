@@ -17,11 +17,21 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // Drive commands
             desktop::drive::list_files,
             desktop::drive::upload_file,
             desktop::drive::create_folder,
             desktop::drive::delete_path,
             desktop::drive::get_home_dir,
+            // Sync commands (rclone-based)
+            desktop::sync::get_sync_status,
+            desktop::sync::start_sync,
+            desktop::sync::stop_sync,
+            desktop::sync::configure_remote,
+            desktop::sync::check_rclone_installed,
+            desktop::sync::list_remotes,
+            desktop::sync::get_sync_folder,
+            desktop::sync::set_sync_folder,
         ])
         .setup(|_app| {
             info!("BotApp setup complete");

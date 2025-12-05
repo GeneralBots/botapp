@@ -16,6 +16,7 @@ tauri-plugin-opener = "2"
 
 # Common
 anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
 dirs = "6.0"
 log = "0.4"
 env_logger = "0.11"
@@ -24,8 +25,9 @@ serde_json = "1.0"
 tokio = { version = "1.41", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 
-# Platform-specific tray
+# Unix process control
 [target.'cfg(unix)'.dependencies]
+libc = "0.2"
 ksni = { version = "0.2", optional = true }
 
 [target.'cfg(windows)'.dependencies]

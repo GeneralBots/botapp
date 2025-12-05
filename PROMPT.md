@@ -5,6 +5,47 @@
 
 ---
 
+## Official Icons - MANDATORY
+
+**NEVER generate icons with LLM. ALWAYS use official SVG icons from assets.**
+
+Icons are stored in:
+- `botui/ui/suite/assets/icons/` - Runtime icons (source of truth)
+
+### Available App Icons
+
+| Icon | File | Usage |
+|------|------|-------|
+| Logo | `gb-logo.svg` | Main GB branding |
+| Bot | `gb-bot.svg` | Bot/assistant |
+| Analytics | `gb-analytics.svg` | Charts, dashboards |
+| Calendar | `gb-calendar.svg` | Scheduling |
+| Chat | `gb-chat.svg` | Messaging |
+| Compliance | `gb-compliance.svg` | Security |
+| Designer | `gb-designer.svg` | Workflows |
+| Drive | `gb-drive.svg` | File storage |
+| Mail | `gb-mail.svg` | Email |
+| Meet | `gb-meet.svg` | Video calls |
+| Paper | `gb-paper.svg` | Documents |
+| Research | `gb-research.svg` | Search |
+| Sources | `gb-sources.svg` | Knowledge |
+| Tasks | `gb-tasks.svg` | Task management |
+
+### Icon Guidelines
+
+- All icons use `stroke="currentColor"` for theming
+- ViewBox: `0 0 24 24`
+- Stroke width: `1.5`
+- Rounded line caps and joins
+
+**DO NOT:**
+- Generate new icons with AI/LLM
+- Use emoji or unicode symbols as icons
+- Use external icon libraries
+- Create inline SVG content
+
+---
+
 ## Project Overview
 
 BotApp is a **Tauri-based desktop wrapper** for General Bots. It provides native desktop experience by wrapping botui's web interface with Tauri's native window capabilities.
