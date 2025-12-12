@@ -212,29 +212,34 @@ use image;     // Icon handling
 
 ## Tauri Configuration (tauri.conf.json)
 
-Key settings:
+Key settings (Tauri v2 format):
 
 ```json
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "General Bots",
+  "version": "6.1.0",
+  "identifier": "br.com.pragmatismo.botapp",
   "build": {
-    "devPath": "ui",
-    "distDir": "ui"
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../botui/ui/suite"
   },
-  "package": {
-    "productName": "General Bots",
-    "version": "6.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "dialog": { "all": true },
-      "fs": { "all": true, "scope": ["$HOME/**"] }
+  "app": {
+    "security": {
+      "csp": null
     },
     "windows": [{
       "title": "General Bots",
       "width": 1200,
-      "height": 800
+      "height": 800,
+      "resizable": true,
+      "fullscreen": false
     }]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
   }
 }
 ```
