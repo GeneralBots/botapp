@@ -111,7 +111,7 @@ Native UI (HTML/CSS/JS)
     ↓ Tauri IPC (invoke)
 Rust #[tauri::command]
     ↓ HTTP (reqwest)
-BotServer API
+botserver API
     ↓
 Business Logic + Database
 ```
@@ -327,7 +327,7 @@ target/release/bundle/
 ## Environment Variables
 
 ```bash
-BOTSERVER_URL=http://localhost:8081  # BotServer location
+BOTSERVER_URL=http://localhost:8081  # botserver location
 TAURI_DEBUG=1                         # Debug mode
 ```
 
