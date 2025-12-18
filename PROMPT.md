@@ -5,6 +5,45 @@
 
 ---
 
+## Weekly Maintenance - EVERY MONDAY
+
+### Package Review Checklist
+
+**Every Monday, review the following:**
+
+1. **Dependency Updates**
+   ```bash
+   cargo outdated
+   cargo audit
+   ```
+
+2. **Package Consolidation Opportunities**
+   - Check if new crates can replace custom code
+   - Look for crates that combine multiple dependencies
+   - Review `Cargo.toml` for redundant dependencies
+
+3. **Code Reduction Candidates**
+   - Custom implementations that now have crate equivalents
+   - Boilerplate that can be replaced with derive macros
+   - Tauri plugin replacements for custom code
+
+4. **Tauri Plugin Updates**
+   ```bash
+   # Check for new Tauri plugins that simplify code
+   # Review tauri-plugin-* ecosystem
+   ```
+
+### Packages to Watch
+
+| Area | Potential Packages | Purpose |
+|------|-------------------|---------|
+| Dialogs | `tauri-plugin-dialog` | Native file dialogs |
+| Notifications | `tauri-plugin-notification` | System notifications |
+| Clipboard | `tauri-plugin-clipboard` | Clipboard access |
+| Auto-update | `tauri-plugin-updater` | App updates |
+
+---
+
 ## Official Icons - MANDATORY
 
 **NEVER generate icons with LLM. ALWAYS use official SVG icons from assets.**
