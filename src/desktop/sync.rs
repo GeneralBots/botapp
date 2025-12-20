@@ -11,10 +11,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Emitter, Window};
 
-/// Global state for tracking the rclone process
 static RCLONE_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 
-/// Sync status reported to the UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStatus {
     pub status: String,
@@ -26,7 +24,6 @@ pub struct SyncStatus {
     pub error: Option<String>,
 }
 
-/// Sync configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
     pub local_path: String,
@@ -36,14 +33,10 @@ pub struct SyncConfig {
     pub exclude_patterns: Vec<String>,
 }
 
-/// Sync direction/mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SyncMode {
-    /// Local changes pushed to remote
     Push,
-    /// Remote changes pulled to local
     Pull,
-    /// Bidirectional sync (newest wins)
     Bisync,
 }
 
@@ -66,7 +59,6 @@ impl Default for SyncConfig {
     }
 }
 
-/// Get current sync status
 #[tauri::command]
 pub fn get_sync_status() -> SyncStatus {
     let process_guard = RCLONE_PROCESS.lock().unwrap();
@@ -87,12 +79,10 @@ pub fn get_sync_status() -> SyncStatus {
     }
 }
 
-/// Start rclone sync process
 #[tauri::command]
 pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
     let config = config.unwrap_or_default();
 
-    // Check if already running
     {
         let process_guard = RCLONE_PROCESS.lock().unwrap();
         if process_guard.is_some() {
@@ -100,17 +90,14 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
         }
     }
 
-    // Ensure local directory exists
     let local_path = PathBuf::from(&config.local_path);
     if !local_path.exists() {
         std::fs::create_dir_all(&local_path)
             .map_err(|e| format!("Failed to create local directory: {}", e))?;
     }
 
-    // Build rclone command
     let mut cmd = Command::new("rclone");
 
-    // Set sync mode
     match config.sync_mode {
         SyncMode::Push => {
             cmd.arg("sync");
@@ -126,22 +113,18 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
             cmd.arg("bisync");
             cmd.arg(&config.local_path);
             cmd.arg(format!("{}:{}", config.remote_name, config.remote_path));
-            cmd.arg("--resync"); // First run needs resync
+            cmd.arg("--resync");
         }
     }
 
-    // Add common options
-    cmd.arg("--progress").arg("--verbose").arg("--checksum"); // Use checksums for accuracy
+    cmd.arg("--progress").arg("--verbose").arg("--checksum");
 
-    // Add exclude patterns
     for pattern in &config.exclude_patterns {
         cmd.arg("--exclude").arg(pattern);
     }
 
-    // Configure output capture
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    // Spawn the process
     let child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             "rclone not found. Please install rclone: https://rclone.org/install/".to_string()
@@ -150,16 +133,13 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
         }
     })?;
 
-    // Store the process handle
     {
         let mut process_guard = RCLONE_PROCESS.lock().unwrap();
         *process_guard = Some(child);
     }
 
-    // Emit started event
     let _ = window.emit("sync_started", ());
 
-    // Spawn a task to monitor the process
     let window_clone = window.clone();
     std::thread::spawn(move || {
         monitor_sync_process(window_clone);
@@ -176,13 +156,11 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
     })
 }
 
-/// Stop rclone sync process
 #[tauri::command]
 pub fn stop_sync() -> Result<SyncStatus, String> {
     let mut process_guard = RCLONE_PROCESS.lock().unwrap();
 
     if let Some(mut child) = process_guard.take() {
-        // Try graceful termination first
         #[cfg(unix)]
         {
             unsafe {
@@ -195,10 +173,8 @@ pub fn stop_sync() -> Result<SyncStatus, String> {
             let _ = child.kill();
         }
 
-        // Wait briefly for graceful shutdown
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        // Force kill if still running
         let _ = child.kill();
         let _ = child.wait();
 
@@ -216,7 +192,6 @@ pub fn stop_sync() -> Result<SyncStatus, String> {
     }
 }
 
-/// Configure rclone remote for S3/MinIO
 #[tauri::command]
 pub fn configure_remote(
     remote_name: String,
@@ -225,7 +200,6 @@ pub fn configure_remote(
     secret_key: String,
     bucket: String,
 ) -> Result<(), String> {
-    // Use rclone config create command
     let output = Command::new("rclone")
         .args([
             "config",
@@ -251,7 +225,6 @@ pub fn configure_remote(
         return Err(format!("rclone config failed: {}", stderr));
     }
 
-    // Set default bucket path
     let _ = Command::new("rclone")
         .args(["config", "update", &remote_name, "bucket", &bucket])
         .output();
@@ -259,7 +232,6 @@ pub fn configure_remote(
     Ok(())
 }
 
-/// Check if rclone is installed
 #[tauri::command]
 pub fn check_rclone_installed() -> Result<String, String> {
     let output = Command::new("rclone")
@@ -282,7 +254,6 @@ pub fn check_rclone_installed() -> Result<String, String> {
     }
 }
 
-/// List configured rclone remotes
 #[tauri::command]
 pub fn list_remotes() -> Result<Vec<String>, String> {
     let output = Command::new("rclone")
@@ -302,7 +273,6 @@ pub fn list_remotes() -> Result<Vec<String>, String> {
     }
 }
 
-/// Get sync folder path
 #[tauri::command]
 pub fn get_sync_folder() -> String {
     dirs::home_dir()
@@ -310,7 +280,6 @@ pub fn get_sync_folder() -> String {
         .unwrap_or_else(|| "~/GeneralBots".to_string())
 }
 
-/// Set sync folder path
 #[tauri::command]
 pub fn set_sync_folder(path: String) -> Result<(), String> {
     let path = PathBuf::from(&path);
@@ -323,12 +292,9 @@ pub fn set_sync_folder(path: String) -> Result<(), String> {
         return Err("Path is not a directory".to_string());
     }
 
-    // Store in app config (would need app handle for persistent storage)
-    // For now, just validate the path
     Ok(())
 }
 
-/// Monitor the sync process and emit events
 fn monitor_sync_process(window: Window) {
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -338,7 +304,6 @@ fn monitor_sync_process(window: Window) {
         if let Some(ref mut child) = *process_guard {
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    // Process finished
                     let success = status.success();
                     *process_guard = None;
 
@@ -364,7 +329,6 @@ fn monitor_sync_process(window: Window) {
                     break;
                 }
                 Ok(None) => {
-                    // Still running - emit progress
                     let status = SyncStatus {
                         status: "syncing".to_string(),
                         is_running: true,
@@ -377,7 +341,6 @@ fn monitor_sync_process(window: Window) {
                     let _ = window.emit("sync_progress", &status);
                 }
                 Err(e) => {
-                    // Error checking status
                     *process_guard = None;
 
                     let status = SyncStatus {
@@ -395,8 +358,8 @@ fn monitor_sync_process(window: Window) {
                 }
             }
         } else {
-            // No process running
             break;
         }
     }
 }
+

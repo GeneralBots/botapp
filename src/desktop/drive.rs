@@ -7,7 +7,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Emitter, Window};
 
-/// Represents a file or directory item
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileItem {
     pub name: String,
@@ -16,7 +15,6 @@ pub struct FileItem {
     pub size: Option<u64>,
 }
 
-/// List files in a directory
 #[tauri::command]
 pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     let base_path = Path::new(path);
@@ -48,7 +46,6 @@ pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
         });
     }
 
-    // Sort: directories first, then alphabetically
     files.sort_by(|a, b| {
         if a.is_dir && !b.is_dir {
             std::cmp::Ordering::Less
@@ -62,7 +59,6 @@ pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     Ok(files)
 }
 
-/// Upload a file with progress reporting
 #[tauri::command]
 pub async fn upload_file(
     window: Window,
@@ -107,7 +103,6 @@ pub async fn upload_file(
     Ok(())
 }
 
-/// Create a new folder
 #[tauri::command]
 pub fn create_folder(path: String, name: String) -> Result<(), String> {
     let full_path = Path::new(&path).join(&name);
@@ -120,7 +115,6 @@ pub fn create_folder(path: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Delete a file or folder
 #[tauri::command]
 pub fn delete_path(path: String) -> Result<(), String> {
     let target = Path::new(&path);
@@ -138,7 +132,6 @@ pub fn delete_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Get home directory
 #[tauri::command]
 pub fn get_home_dir() -> Result<String, String> {
     dirs::home_dir()
