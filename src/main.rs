@@ -19,7 +19,8 @@ async fn start_tray(tray: tauri::State<'_, TrayManager>) -> Result<(), String> {
 
 #[tauri::command]
 async fn stop_tray(tray: tauri::State<'_, TrayManager>) -> Result<(), String> {
-    tray.stop().await.map_err(|e| e.to_string())
+    tray.stop().await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -70,7 +71,7 @@ fn handle_tray_event(tray: tauri::State<'_, TrayManager>, event: String) -> Resu
         "settings" => TrayEvent::Settings,
         "about" => TrayEvent::About,
         "quit" => TrayEvent::Quit,
-        _ => return Err(format!("Unknown event: {}", event)),
+        _ => return Err(format!("Unknown event: {event}")),
     };
     tray.handle_event(tray_event);
     Ok(())
@@ -80,8 +81,10 @@ fn handle_tray_event(tray: tauri::State<'_, TrayManager>, event: String) -> Resu
 async fn check_services(
     monitor: tauri::State<'_, tokio::sync::Mutex<ServiceMonitor>>,
 ) -> Result<Vec<desktop::tray::ServiceStatus>, String> {
-    let mut monitor = monitor.lock().await;
-    Ok(monitor.check_services().await)
+    let mut guard = monitor.lock().await;
+    let result = guard.check_services().await;
+    drop(guard);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -90,8 +93,9 @@ async fn add_service(
     name: String,
     port: u16,
 ) -> Result<(), String> {
-    let mut monitor = monitor.lock().await;
-    monitor.add_service(&name, port);
+    let mut guard = monitor.lock().await;
+    guard.add_service(&name, port);
+    drop(guard);
     Ok(())
 }
 
@@ -100,24 +104,30 @@ async fn get_service(
     monitor: tauri::State<'_, tokio::sync::Mutex<ServiceMonitor>>,
     name: String,
 ) -> Result<Option<desktop::tray::ServiceStatus>, String> {
-    let monitor = monitor.lock().await;
-    Ok(monitor.get_service(&name).cloned())
+    let guard = monitor.lock().await;
+    let result = guard.get_service(&name).cloned();
+    drop(guard);
+    Ok(result)
 }
 
 #[tauri::command]
 async fn all_services_running(
     monitor: tauri::State<'_, tokio::sync::Mutex<ServiceMonitor>>,
 ) -> Result<bool, String> {
-    let monitor = monitor.lock().await;
-    Ok(monitor.all_running())
+    let guard = monitor.lock().await;
+    let result = guard.all_running();
+    drop(guard);
+    Ok(result)
 }
 
 #[tauri::command]
 async fn any_service_running(
     monitor: tauri::State<'_, tokio::sync::Mutex<ServiceMonitor>>,
 ) -> Result<bool, String> {
-    let monitor = monitor.lock().await;
-    Ok(monitor.any_running())
+    let guard = monitor.lock().await;
+    let result = guard.any_running();
+    drop(guard);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -138,8 +148,7 @@ fn create_tray_with_mode(mode: String) -> Result<String, String> {
         "client" => RunningMode::Client,
         _ => {
             return Err(format!(
-                "Invalid mode: {}. Use Server, Desktop, or Client",
-                mode
+                "Invalid mode: {mode}. Use Server, Desktop, or Client"
             ))
         }
     };
@@ -152,12 +161,13 @@ fn main() {
         .format_timestamp_millis()
         .init();
 
-    info!("BotApp {} starting...", env!("CARGO_PKG_VERSION"));
+    let version = env!("CARGO_PKG_VERSION");
+    info!("BotApp {version} starting...");
 
     let tray_manager = TrayManager::with_mode(RunningMode::Desktop);
     let service_monitor = tokio::sync::Mutex::new(ServiceMonitor::new());
 
-    tauri::Builder::default()
+    let builder_result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(tray_manager)
@@ -197,20 +207,29 @@ fn main() {
         .setup(|app| {
             let tray = app.state::<TrayManager>();
             let mode = tray.get_mode_string();
-            info!("BotApp setup complete in {} mode", mode);
+            info!("BotApp setup complete in {mode} mode");
 
             let tray_clone = tray.inner().clone();
             std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        log::error!("Failed to create runtime: {e}");
+                        return;
+                    }
+                };
                 rt.block_on(async {
                     if let Err(e) = tray_clone.start().await {
-                        log::error!("Failed to start tray: {}", e);
+                        log::error!("Failed to start tray: {e}");
                     }
                 });
             });
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Failed to run BotApp");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = builder_result {
+        log::error!("Failed to run BotApp: {e}");
+    }
 }

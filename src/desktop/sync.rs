@@ -1,9 +1,4 @@
-//! Rclone Sync Module for Desktop File Synchronization
-//!
-//! Provides bidirectional sync between local filesystem and remote S3 storage
-//! using rclone as the underlying sync engine.
-//!
-//! Desktop-only feature: This runs rclone as a subprocess on the user's machine.
+//! Sync module for cloud storage synchronization using rclone.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -42,10 +37,12 @@ pub enum SyncMode {
 
 impl Default for SyncConfig {
     fn default() -> Self {
+        let local_path = dirs::home_dir().map_or_else(
+            || "~/GeneralBots".to_string(),
+            |p| p.join("GeneralBots").to_string_lossy().to_string(),
+        );
         Self {
-            local_path: dirs::home_dir()
-                .map(|p| p.join("GeneralBots").to_string_lossy().to_string())
-                .unwrap_or_else(|| "~/GeneralBots".to_string()),
+            local_path,
             remote_name: "gbdrive".to_string(),
             remote_path: "/".to_string(),
             sync_mode: SyncMode::Bisync,
@@ -59,10 +56,15 @@ impl Default for SyncConfig {
     }
 }
 
+/// Returns the current sync status.
 #[tauri::command]
+#[must_use]
 pub fn get_sync_status() -> SyncStatus {
-    let process_guard = RCLONE_PROCESS.lock().unwrap();
+    let process_guard = RCLONE_PROCESS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let is_running = process_guard.is_some();
+    drop(process_guard);
 
     SyncStatus {
         status: if is_running {
@@ -79,12 +81,19 @@ pub fn get_sync_status() -> SyncStatus {
     }
 }
 
+/// Starts the sync process with the given configuration.
+///
+/// # Errors
+///
+/// Returns an error if sync is already running, directory creation fails, or rclone fails to start.
 #[tauri::command]
-pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
+pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
     let config = config.unwrap_or_default();
 
     {
-        let process_guard = RCLONE_PROCESS.lock().unwrap();
+        let process_guard = RCLONE_PROCESS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if process_guard.is_some() {
             return Err("Sync already running".to_string());
         }
@@ -93,7 +102,7 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
     let local_path = PathBuf::from(&config.local_path);
     if !local_path.exists() {
         std::fs::create_dir_all(&local_path)
-            .map_err(|e| format!("Failed to create local directory: {}", e))?;
+            .map_err(|e| format!("Failed to create local directory: {e}"))?;
     }
 
     let mut cmd = Command::new("rclone");
@@ -129,20 +138,21 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
         if e.kind() == std::io::ErrorKind::NotFound {
             "rclone not found. Please install rclone: https://rclone.org/install/".to_string()
         } else {
-            format!("Failed to start rclone: {}", e)
+            format!("Failed to start rclone: {e}")
         }
     })?;
 
     {
-        let mut process_guard = RCLONE_PROCESS.lock().unwrap();
+        let mut process_guard = RCLONE_PROCESS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *process_guard = Some(child);
     }
 
     let _ = window.emit("sync_started", ());
 
-    let window_clone = window.clone();
     std::thread::spawn(move || {
-        monitor_sync_process(window_clone);
+        monitor_sync_process(&window);
     });
 
     Ok(SyncStatus {
@@ -156,82 +166,87 @@ pub async fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<Sy
     })
 }
 
+/// Stops the currently running sync process.
+///
+/// # Errors
+///
+/// Returns an error if no sync process is running.
 #[tauri::command]
 pub fn stop_sync() -> Result<SyncStatus, String> {
-    let mut process_guard = RCLONE_PROCESS.lock().unwrap();
+    let mut process_guard = RCLONE_PROCESS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    if let Some(mut child) = process_guard.take() {
-        #[cfg(unix)]
-        {
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGTERM);
-            }
-        }
-
-        #[cfg(windows)]
-        {
+    process_guard
+        .take()
+        .ok_or_else(|| "No sync process running".to_string())
+        .map(|mut child| {
             let _ = child.kill();
-        }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = child.wait();
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        let _ = child.kill();
-        let _ = child.wait();
-
-        Ok(SyncStatus {
-            status: "stopped".to_string(),
-            is_running: false,
-            last_sync: Some(chrono::Utc::now().to_rfc3339()),
-            files_synced: 0,
-            bytes_transferred: 0,
-            current_file: None,
-            error: None,
+            SyncStatus {
+                status: "stopped".to_string(),
+                is_running: false,
+                last_sync: Some(chrono::Utc::now().to_rfc3339()),
+                files_synced: 0,
+                bytes_transferred: 0,
+                current_file: None,
+                error: None,
+            }
         })
-    } else {
-        Err("No sync process running".to_string())
-    }
 }
 
+/// Configures an rclone remote for S3-compatible storage.
+///
+/// # Errors
+///
+/// Returns an error if rclone configuration fails.
 #[tauri::command]
 pub fn configure_remote(
-    remote_name: String,
-    endpoint: String,
-    access_key: String,
-    secret_key: String,
-    bucket: String,
+    remote_name: &str,
+    endpoint: &str,
+    access_key: &str,
+    secret_key: &str,
+    bucket: &str,
 ) -> Result<(), String> {
     let output = Command::new("rclone")
         .args([
             "config",
             "create",
-            &remote_name,
+            remote_name,
             "s3",
             "provider",
             "Minio",
             "endpoint",
-            &endpoint,
+            endpoint,
             "access_key_id",
-            &access_key,
+            access_key,
             "secret_access_key",
-            &secret_key,
+            secret_key,
             "acl",
             "private",
         ])
         .output()
-        .map_err(|e| format!("Failed to configure rclone: {}", e))?;
+        .map_err(|e| format!("Failed to configure rclone: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("rclone config failed: {}", stderr));
+        return Err(format!("rclone config failed: {stderr}"));
     }
 
     let _ = Command::new("rclone")
-        .args(["config", "update", &remote_name, "bucket", &bucket])
+        .args(["config", "update", remote_name, "bucket", bucket])
         .output();
 
     Ok(())
 }
 
+/// Checks if rclone is installed and returns its version.
+///
+/// # Errors
+///
+/// Returns an error if rclone is not installed or the check fails.
 #[tauri::command]
 pub fn check_rclone_installed() -> Result<String, String> {
     let output = Command::new("rclone")
@@ -241,7 +256,7 @@ pub fn check_rclone_installed() -> Result<String, String> {
             if e.kind() == std::io::ErrorKind::NotFound {
                 "rclone not installed".to_string()
             } else {
-                format!("Error checking rclone: {}", e)
+                format!("Error checking rclone: {e}")
             }
         })?;
 
@@ -254,12 +269,17 @@ pub fn check_rclone_installed() -> Result<String, String> {
     }
 }
 
+/// Lists all configured rclone remotes.
+///
+/// # Errors
+///
+/// Returns an error if rclone fails to list remotes.
 #[tauri::command]
 pub fn list_remotes() -> Result<Vec<String>, String> {
     let output = Command::new("rclone")
         .args(["listremotes"])
         .output()
-        .map_err(|e| format!("Failed to list remotes: {}", e))?;
+        .map_err(|e| format!("Failed to list remotes: {e}"))?;
 
     if output.status.success() {
         let remotes = String::from_utf8_lossy(&output.stdout);
@@ -273,19 +293,27 @@ pub fn list_remotes() -> Result<Vec<String>, String> {
     }
 }
 
+/// Returns the default sync folder path.
 #[tauri::command]
+#[must_use]
 pub fn get_sync_folder() -> String {
-    dirs::home_dir()
-        .map(|p| p.join("GeneralBots").to_string_lossy().to_string())
-        .unwrap_or_else(|| "~/GeneralBots".to_string())
+    dirs::home_dir().map_or_else(
+        || "~/GeneralBots".to_string(),
+        |p| p.join("GeneralBots").to_string_lossy().to_string(),
+    )
 }
 
+/// Sets the sync folder path, creating it if necessary.
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be created or the path is not a directory.
 #[tauri::command]
-pub fn set_sync_folder(path: String) -> Result<(), String> {
-    let path = PathBuf::from(&path);
+pub fn set_sync_folder(path: &str) -> Result<(), String> {
+    let path = PathBuf::from(path);
 
     if !path.exists() {
-        std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {}", e))?;
+        std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {e}"))?;
     }
 
     if !path.is_dir() {
@@ -295,17 +323,20 @@ pub fn set_sync_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
-fn monitor_sync_process(window: Window) {
+fn monitor_sync_process(window: &Window) {
     loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut process_guard = RCLONE_PROCESS.lock().unwrap();
+        let mut process_guard = RCLONE_PROCESS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        if let Some(ref mut child) = *process_guard {
+        let status_opt = if let Some(ref mut child) = *process_guard {
             match child.try_wait() {
-                Ok(Some(status)) => {
-                    let success = status.success();
+                Ok(Some(exit_status)) => {
+                    let success = exit_status.success();
                     *process_guard = None;
+                    drop(process_guard);
 
                     let status = SyncStatus {
                         status: if success {
@@ -321,15 +352,20 @@ fn monitor_sync_process(window: Window) {
                         error: if success {
                             None
                         } else {
-                            Some(format!("Exit code: {:?}", status.code()))
+                            Some(format!("Exit code: {:?}", exit_status.code()))
                         },
                     };
 
-                    let _ = window.emit("sync_completed", &status);
-                    break;
+                    if success {
+                        let _ = window.emit("sync_completed", &status);
+                    } else {
+                        let _ = window.emit("sync_error", &status);
+                    }
+                    return;
                 }
                 Ok(None) => {
-                    let status = SyncStatus {
+                    drop(process_guard);
+                    Some(SyncStatus {
                         status: "syncing".to_string(),
                         is_running: true,
                         last_sync: None,
@@ -337,11 +373,11 @@ fn monitor_sync_process(window: Window) {
                         bytes_transferred: 0,
                         current_file: None,
                         error: None,
-                    };
-                    let _ = window.emit("sync_progress", &status);
+                    })
                 }
                 Err(e) => {
                     *process_guard = None;
+                    drop(process_guard);
 
                     let status = SyncStatus {
                         status: "error".to_string(),
@@ -350,16 +386,19 @@ fn monitor_sync_process(window: Window) {
                         files_synced: 0,
                         bytes_transferred: 0,
                         current_file: None,
-                        error: Some(format!("Process error: {}", e)),
+                        error: Some(format!("Process error: {e}")),
                     };
-
                     let _ = window.emit("sync_error", &status);
-                    break;
+                    return;
                 }
             }
         } else {
-            break;
+            drop(process_guard);
+            return;
+        };
+
+        if let Some(status) = status_opt {
+            let _ = window.emit("sync_progress", &status);
         }
     }
 }
-

@@ -4,6 +4,9 @@ version = "6.1.0"
 edition = "2021"
 description = "General Bots App - Tauri wrapper for desktop/mobile"
 license = "AGPL-3.0"
+repository = "https://github.com/GeneralBots/BotServer"
+keywords = ["bot", "ai", "chatbot", "tauri", "desktop"]
+categories = ["gui", "network-programming"]
 
 [dependencies]
 # Core from botlib
@@ -42,3 +45,24 @@ desktop-tray = ["dep:ksni", "dep:trayicon"]
 
 [build-dependencies]
 tauri-build = "2"
+
+[lints.rust]
+unused_imports = "warn"
+unused_variables = "warn"
+unused_mut = "warn"
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+# Disabled: Tauri commands require owned types (Window) that cannot be passed by reference
+needless_pass_by_value = "allow"
+# Disabled: transitive dependencies we cannot control
+multiple_crate_versions = "allow"

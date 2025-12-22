@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tauri::{Emitter, Window};
 
@@ -15,6 +17,11 @@ pub struct FileItem {
     pub size: Option<u64>,
 }
 
+/// Lists files in the specified directory.
+///
+/// # Errors
+///
+/// Returns an error if the path does not exist or cannot be read.
 #[tauri::command]
 pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     let base_path = Path::new(path);
@@ -35,8 +42,8 @@ pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
             .unwrap_or("")
             .to_string();
 
-        let size = metadata.as_ref().map(|m| m.len());
-        let is_dir = metadata.map(|m| m.is_dir()).unwrap_or(false);
+        let size = metadata.as_ref().map(std::fs::Metadata::len);
+        let is_dir = metadata.is_some_and(|m| m.is_dir());
 
         files.push(FileItem {
             name,
@@ -59,17 +66,15 @@ pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     Ok(files)
 }
 
+/// Uploads a file from source to destination with progress events.
+///
+/// # Errors
+///
+/// Returns an error if the source file cannot be read or the destination cannot be written.
 #[tauri::command]
-pub async fn upload_file(
-    window: Window,
-    src_path: String,
-    dest_path: String,
-) -> Result<(), String> {
-    use std::fs::File;
-    use std::io::{Read, Write};
-
-    let src = PathBuf::from(&src_path);
-    let dest_dir = PathBuf::from(&dest_path);
+pub fn upload_file(window: Window, src_path: &str, dest_path: &str) -> Result<(), String> {
+    let src = PathBuf::from(src_path);
+    let dest_dir = PathBuf::from(dest_path);
     let dest = dest_dir.join(src.file_name().ok_or("Invalid source file")?);
 
     if !dest_dir.exists() {
@@ -81,7 +86,7 @@ pub async fn upload_file(
     let file_size = source_file.metadata().map_err(|e| e.to_string())?.len();
 
     let mut buffer = [0; 8192];
-    let mut total_read = 0u64;
+    let mut total_read: u64 = 0;
 
     loop {
         let bytes_read = source_file.read(&mut buffer).map_err(|e| e.to_string())?;
@@ -93,7 +98,12 @@ pub async fn upload_file(
             .map_err(|e| e.to_string())?;
 
         total_read += bytes_read as u64;
-        let progress = (total_read as f64 / file_size as f64) * 100.0;
+
+        let progress = if file_size > 0 {
+            (total_read * 100) / file_size
+        } else {
+            100
+        };
 
         window
             .emit("upload_progress", progress)
@@ -103,9 +113,14 @@ pub async fn upload_file(
     Ok(())
 }
 
+/// Creates a new folder at the specified path.
+///
+/// # Errors
+///
+/// Returns an error if the folder already exists or cannot be created.
 #[tauri::command]
-pub fn create_folder(path: String, name: String) -> Result<(), String> {
-    let full_path = Path::new(&path).join(&name);
+pub fn create_folder(path: &str, name: &str) -> Result<(), String> {
+    let full_path = Path::new(path).join(name);
 
     if full_path.exists() {
         return Err("Folder already exists".into());
@@ -115,9 +130,14 @@ pub fn create_folder(path: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Deletes a file or directory at the specified path.
+///
+/// # Errors
+///
+/// Returns an error if the path does not exist or cannot be deleted.
 #[tauri::command]
-pub fn delete_path(path: String) -> Result<(), String> {
-    let target = Path::new(&path);
+pub fn delete_path(path: &str) -> Result<(), String> {
+    let target = Path::new(path);
 
     if !target.exists() {
         return Err("Path does not exist".into());
@@ -132,6 +152,11 @@ pub fn delete_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns the user's home directory path.
+///
+/// # Errors
+///
+/// Returns an error if the home directory cannot be determined.
 #[tauri::command]
 pub fn get_home_dir() -> Result<String, String> {
     dirs::home_dir()
