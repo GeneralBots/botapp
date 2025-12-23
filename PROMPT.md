@@ -26,7 +26,11 @@
 ❌ NEVER leave dead code - DELETE it or IMPLEMENT it
 ❌ NEVER use approximate constants (3.14159) - use std::f64::consts::PI
 ❌ NEVER silence clippy in code - FIX THE CODE or configure in Cargo.toml
-❌ NEVER add comments explaining what code does - code must be self-documenting
+❌ NEVER add comments - code must be self-documenting via types and naming
+❌ NEVER add file header comments (//! or /*!) - no module docs
+❌ NEVER add function doc comments (///) - types are the documentation
+❌ NEVER add ASCII art or banners in code
+❌ NEVER add TODO/FIXME/HACK comments - fix it or delete it
 ```
 
 ---
@@ -103,6 +107,50 @@ struct MyStruct { }
 #[derive(PartialEq, Eq)]
 struct MyStruct { }
 ```
+
+### Zero Comments Policy
+
+```rust
+// ❌ WRONG - any comments
+/// Returns the user's full name
+fn get_full_name(&self) -> String { }
+
+// Validate input before processing
+fn process(data: &str) { }
+
+//! This module handles user authentication
+
+// ✅ CORRECT - self-documenting code, no comments
+fn full_name(&self) -> String { }
+
+fn process_validated_input(data: &str) { }
+```
+
+**Why zero comments in the LLM era:**
+
+With Rust's strong type system, **zero comments** is the right approach:
+
+**Rust already provides:**
+- Type signatures = documentation
+- `Result<T, E>` = documents errors
+- `Option<T>` = documents nullability
+- Trait bounds = documents requirements
+- Expressive naming = self-documenting
+
+**LLMs can:**
+- Infer intent from code structure
+- Understand patterns without comments
+- Generate docs on-demand if needed
+
+**Comments become:**
+- Stale/wrong (code changes, comments don't)
+- Noise that obscures actual logic
+- Maintenance burden
+
+**Rust community stance:**
+- Rustdoc is for *public API* crates (libraries published to crates.io)
+- Internal/application code: types + good names > comments
+- The Rust book emphasizes "code should be self-documenting"
 
 ---
 
@@ -491,6 +539,7 @@ cargo test
 ## Remember
 
 - **ZERO WARNINGS** - Every clippy warning must be fixed
+- **ZERO COMMENTS** - No comments, no doc comments, no file headers, no ASCII art
 - **NO ALLOW IN CODE** - Never use #[allow()] in source files
 - **CARGO.TOML EXCEPTIONS OK** - Disable lints with false positives in Cargo.toml with comment
 - **NO DEAD CODE** - Delete unused code, never prefix with _

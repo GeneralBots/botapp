@@ -1,13 +1,9 @@
-//! Tray manager for desktop application.
-//!
-//! Provides system tray functionality for different operating modes.
 
 use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Manages the system tray icon and its interactions.
 #[derive(Clone, Debug)]
 pub struct TrayManager {
     hostname: Arc<RwLock<Option<String>>>,
@@ -15,32 +11,22 @@ pub struct TrayManager {
     tray_active: Arc<RwLock<bool>>,
 }
 
-/// The running mode of the application.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunningMode {
-    /// Full server mode with all services.
     Server,
-    /// Desktop mode with UI and local services.
     Desktop,
-    /// Client mode connecting to remote server.
     Client,
 }
 
-/// Events that can be triggered from the tray menu.
 #[derive(Debug, Clone, Copy)]
 pub enum TrayEvent {
-    /// Open the main application window.
     Open,
-    /// Open settings dialog.
     Settings,
-    /// Show about dialog.
     About,
-    /// Quit the application.
     Quit,
 }
 
 impl TrayManager {
-    /// Creates a new tray manager with default settings.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -50,7 +36,6 @@ impl TrayManager {
         }
     }
 
-    /// Creates a new tray manager with the specified running mode.
     #[must_use]
     pub fn with_mode(mode: RunningMode) -> Self {
         Self {
@@ -60,11 +45,6 @@ impl TrayManager {
         }
     }
 
-    /// Starts the tray manager based on the running mode.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the tray initialization fails.
     pub async fn start(&self) -> Result<()> {
         match self.running_mode {
             RunningMode::Desktop => {
@@ -129,7 +109,6 @@ impl TrayManager {
         );
     }
 
-    /// Returns a string representation of the current running mode.
     #[must_use]
     pub fn get_mode_string(&self) -> String {
         match self.running_mode {
@@ -139,11 +118,6 @@ impl TrayManager {
         }
     }
 
-    /// Updates the tray status message.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the status update fails.
     pub async fn update_status(&self, status: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -155,11 +129,6 @@ impl TrayManager {
         Ok(())
     }
 
-    /// Sets the tray tooltip text.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if setting the tooltip fails.
     pub async fn set_tooltip(&self, tooltip: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -171,11 +140,6 @@ impl TrayManager {
         Ok(())
     }
 
-    /// Shows a desktop notification.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if showing the notification fails.
     pub async fn show_notification(&self, title: &str, body: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -204,23 +168,16 @@ impl TrayManager {
         Ok(())
     }
 
-    /// Gets the current hostname.
     pub async fn get_hostname(&self) -> Option<String> {
         let hostname = self.hostname.read().await;
         hostname.clone()
     }
 
-    /// Sets the hostname.
     pub async fn set_hostname(&self, new_hostname: String) {
         let mut hostname = self.hostname.write().await;
         *hostname = Some(new_hostname);
     }
 
-    /// Stops the tray manager.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if stopping fails.
     pub async fn stop(&self) {
         let mut active = self.tray_active.write().await;
         *active = false;
@@ -228,7 +185,6 @@ impl TrayManager {
         log::info!("Tray manager stopped");
     }
 
-    /// Returns whether the tray is currently active.
     pub async fn is_active(&self) -> bool {
         let active = self.tray_active.read().await;
         let result = *active;
@@ -236,7 +192,6 @@ impl TrayManager {
         result
     }
 
-    /// Handles a tray event and performs the appropriate action.
     pub fn handle_event(&self, event: TrayEvent) {
         let mode = self.get_mode_string();
         match event {
@@ -262,27 +217,20 @@ impl Default for TrayManager {
     }
 }
 
-/// Monitors the status of services.
 #[derive(Debug)]
 pub struct ServiceMonitor {
     services: Vec<ServiceStatus>,
 }
 
-/// Status of a monitored service.
 #[derive(Debug, Clone, Serialize)]
 pub struct ServiceStatus {
-    /// Service name.
     pub name: String,
-    /// Whether the service is running.
     pub running: bool,
-    /// Service port number.
     pub port: u16,
-    /// Service URL.
     pub url: String,
 }
 
 impl ServiceMonitor {
-    /// Creates a new service monitor with default services.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -303,7 +251,6 @@ impl ServiceMonitor {
         }
     }
 
-    /// Adds a service to monitor.
     pub fn add_service(&mut self, name: &str, port: u16) {
         self.services.push(ServiceStatus {
             name: name.to_string(),
@@ -313,7 +260,6 @@ impl ServiceMonitor {
         });
     }
 
-    /// Checks all services and returns their current status.
     pub async fn check_services(&mut self) -> Vec<ServiceStatus> {
         for service in &mut self.services {
             service.running = Self::check_service(&service.url).await;
@@ -321,7 +267,6 @@ impl ServiceMonitor {
         self.services.clone()
     }
 
-    /// Checks if a service is running at the given URL.
     pub async fn check_service(url: &str) -> bool {
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return false;
@@ -344,19 +289,16 @@ impl ServiceMonitor {
             .is_ok_and(|response| response.status().is_success())
     }
 
-    /// Gets a service by name.
     #[must_use]
     pub fn get_service(&self, name: &str) -> Option<&ServiceStatus> {
         self.services.iter().find(|s| s.name == name)
     }
 
-    /// Returns whether all services are running.
     #[must_use]
     pub fn all_running(&self) -> bool {
         self.services.iter().all(|s| s.running)
     }
 
-    /// Returns whether any service is running.
     #[must_use]
     pub fn any_running(&self) -> bool {
         self.services.iter().any(|s| s.running)

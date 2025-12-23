@@ -46,23 +46,5 @@ desktop-tray = ["dep:ksni", "dep:trayicon"]
 [build-dependencies]
 tauri-build = "2"
 
-[lints.rust]
-unused_imports = "warn"
-unused_variables = "warn"
-unused_mut = "warn"
-unsafe_code = "deny"
-missing_debug_implementations = "warn"
-
-[lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
-cargo = "warn"
-unwrap_used = "warn"
-expect_used = "warn"
-panic = "warn"
-todo = "warn"
-# Disabled: Tauri commands require owned types (Window) that cannot be passed by reference
-needless_pass_by_value = "allow"
-# Disabled: transitive dependencies we cannot control
-multiple_crate_versions = "allow"
+[lints]
+workspace = true

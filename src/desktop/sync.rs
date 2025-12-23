@@ -1,4 +1,3 @@
-//! Sync module for cloud storage synchronization using rclone.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -56,7 +55,6 @@ impl Default for SyncConfig {
     }
 }
 
-/// Returns the current sync status.
 #[tauri::command]
 #[must_use]
 pub fn get_sync_status() -> SyncStatus {
@@ -81,11 +79,6 @@ pub fn get_sync_status() -> SyncStatus {
     }
 }
 
-/// Starts the sync process with the given configuration.
-///
-/// # Errors
-///
-/// Returns an error if sync is already running, directory creation fails, or rclone fails to start.
 #[tauri::command]
 pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
     let config = config.unwrap_or_default();
@@ -166,11 +159,6 @@ pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStat
     })
 }
 
-/// Stops the currently running sync process.
-///
-/// # Errors
-///
-/// Returns an error if no sync process is running.
 #[tauri::command]
 pub fn stop_sync() -> Result<SyncStatus, String> {
     let mut process_guard = RCLONE_PROCESS
@@ -197,11 +185,6 @@ pub fn stop_sync() -> Result<SyncStatus, String> {
         })
 }
 
-/// Configures an rclone remote for S3-compatible storage.
-///
-/// # Errors
-///
-/// Returns an error if rclone configuration fails.
 #[tauri::command]
 pub fn configure_remote(
     remote_name: &str,
@@ -242,11 +225,6 @@ pub fn configure_remote(
     Ok(())
 }
 
-/// Checks if rclone is installed and returns its version.
-///
-/// # Errors
-///
-/// Returns an error if rclone is not installed or the check fails.
 #[tauri::command]
 pub fn check_rclone_installed() -> Result<String, String> {
     let output = Command::new("rclone")
@@ -269,11 +247,6 @@ pub fn check_rclone_installed() -> Result<String, String> {
     }
 }
 
-/// Lists all configured rclone remotes.
-///
-/// # Errors
-///
-/// Returns an error if rclone fails to list remotes.
 #[tauri::command]
 pub fn list_remotes() -> Result<Vec<String>, String> {
     let output = Command::new("rclone")
@@ -293,7 +266,6 @@ pub fn list_remotes() -> Result<Vec<String>, String> {
     }
 }
 
-/// Returns the default sync folder path.
 #[tauri::command]
 #[must_use]
 pub fn get_sync_folder() -> String {
@@ -303,11 +275,6 @@ pub fn get_sync_folder() -> String {
     )
 }
 
-/// Sets the sync folder path, creating it if necessary.
-///
-/// # Errors
-///
-/// Returns an error if the directory cannot be created or the path is not a directory.
 #[tauri::command]
 pub fn set_sync_folder(path: &str) -> Result<(), String> {
     let path = PathBuf::from(path);
