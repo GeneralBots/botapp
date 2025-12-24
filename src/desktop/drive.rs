@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
@@ -14,6 +13,10 @@ pub struct FileItem {
     pub size: Option<u64>,
 }
 
+/// List files in a directory.
+///
+/// # Errors
+/// Returns an error if the path does not exist or cannot be read.
 #[tauri::command]
 pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     let base_path = Path::new(path);
@@ -58,6 +61,10 @@ pub fn list_files(path: &str) -> Result<Vec<FileItem>, String> {
     Ok(files)
 }
 
+/// Upload a file to the specified destination.
+///
+/// # Errors
+/// Returns an error if the source file is invalid or the copy operation fails.
 #[tauri::command]
 pub fn upload_file(window: Window, src_path: &str, dest_path: &str) -> Result<(), String> {
     let src = PathBuf::from(src_path);
@@ -100,6 +107,10 @@ pub fn upload_file(window: Window, src_path: &str, dest_path: &str) -> Result<()
     Ok(())
 }
 
+/// Create a new folder at the specified path.
+///
+/// # Errors
+/// Returns an error if the folder already exists or cannot be created.
 #[tauri::command]
 pub fn create_folder(path: &str, name: &str) -> Result<(), String> {
     let full_path = Path::new(path).join(name);
@@ -112,6 +123,10 @@ pub fn create_folder(path: &str, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Delete a file or folder at the specified path.
+///
+/// # Errors
+/// Returns an error if the path does not exist or the item cannot be deleted.
 #[tauri::command]
 pub fn delete_path(path: &str) -> Result<(), String> {
     let target = Path::new(path);
@@ -129,6 +144,10 @@ pub fn delete_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Get the user's home directory path.
+///
+/// # Errors
+/// Returns an error if the home directory cannot be determined.
 #[tauri::command]
 pub fn get_home_dir() -> Result<String, String> {
     dirs::home_dir()

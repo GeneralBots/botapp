@@ -1,4 +1,3 @@
-
 use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
@@ -45,6 +44,8 @@ impl TrayManager {
         }
     }
 
+    /// # Errors
+    /// Returns an error if the tray system fails to initialize.
     pub async fn start(&self) -> Result<()> {
         match self.running_mode {
             RunningMode::Desktop => {
@@ -118,6 +119,8 @@ impl TrayManager {
         }
     }
 
+    /// # Errors
+    /// Returns an error if the status update fails.
     pub async fn update_status(&self, status: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -129,6 +132,8 @@ impl TrayManager {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns an error if setting the tooltip fails.
     pub async fn set_tooltip(&self, tooltip: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -140,6 +145,8 @@ impl TrayManager {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns an error if the notification fails to display.
     pub async fn show_notification(&self, title: &str, body: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;

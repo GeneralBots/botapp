@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -79,6 +78,8 @@ pub fn get_sync_status() -> SyncStatus {
     }
 }
 
+/// # Errors
+/// Returns an error if sync is already running, directory creation fails, or rclone is not found.
 #[tauri::command]
 pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
     let config = config.unwrap_or_default();
@@ -159,6 +160,8 @@ pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStat
     })
 }
 
+/// # Errors
+/// Returns an error if no sync process is currently running.
 #[tauri::command]
 pub fn stop_sync() -> Result<SyncStatus, String> {
     let mut process_guard = RCLONE_PROCESS
@@ -185,6 +188,8 @@ pub fn stop_sync() -> Result<SyncStatus, String> {
         })
 }
 
+/// # Errors
+/// Returns an error if rclone configuration fails.
 #[tauri::command]
 pub fn configure_remote(
     remote_name: &str,
@@ -225,6 +230,8 @@ pub fn configure_remote(
     Ok(())
 }
 
+/// # Errors
+/// Returns an error if rclone is not installed or the version check fails.
 #[tauri::command]
 pub fn check_rclone_installed() -> Result<String, String> {
     let output = Command::new("rclone")
@@ -247,6 +254,8 @@ pub fn check_rclone_installed() -> Result<String, String> {
     }
 }
 
+/// # Errors
+/// Returns an error if listing rclone remotes fails.
 #[tauri::command]
 pub fn list_remotes() -> Result<Vec<String>, String> {
     let output = Command::new("rclone")
@@ -275,6 +284,8 @@ pub fn get_sync_folder() -> String {
     )
 }
 
+/// # Errors
+/// Returns an error if the directory cannot be created or the path is not a directory.
 #[tauri::command]
 pub fn set_sync_folder(path: &str) -> Result<(), String> {
     let path = PathBuf::from(path);
