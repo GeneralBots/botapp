@@ -154,6 +154,55 @@ Edit `tauri.conf.json` to customize:
 
 AGPL-3.0 - See [LICENSE](LICENSE) for details.
 
+## Testing and Safety Tooling
+
+BotApp follows General Bots' commitment to code quality and safety. The following tools are available for verification:
+
+### Standard Testing
+
+```bash
+cargo test
+```
+
+### Miri (Undefined Behavior Detection)
+
+Miri detects undefined behavior in unsafe code. Useful for testing data structures and parsing logic.
+
+```bash
+cargo +nightly miri test
+```
+
+**Limitations:** Cannot test I/O, FFI, or full integration tests.
+
+### AddressSanitizer
+
+Detects memory errors at runtime:
+
+```bash
+RUSTFLAGS="-Z sanitizer=address" cargo +nightly test
+```
+
+### Kani (Formal Verification)
+
+For mathematically proving critical code properties:
+
+```bash
+cargo kani --function critical_function
+```
+
+### Ferrocene
+
+Ferrocene is a qualified Rust compiler for safety-critical systems (ISO 26262, IEC 61508).
+
+**Should BotApp use Ferrocene?**
+
+- **For typical desktop deployment:** No - standard Rust + testing is sufficient
+- **Consider Ferrocene if:** Deploying in regulated industries (medical, automotive, aerospace)
+
+For most use cases, comprehensive testing with the tools above provides adequate confidence.
+
+See [Testing & Safety Tooling](../botbook/src/07-gbapp/testing-safety.md) for complete documentation.
+
 ## Related Projects
 
 - [botui](https://github.com/GeneralBots/botui) - Pure web UI
