@@ -35,6 +35,76 @@
 
 ---
 
+## 🔐 SECURITY REQUIREMENTS
+
+**BotApp inherits ALL security requirements from `botserver/PROMPT.md`.**
+
+For comprehensive Rust security patterns, refer to:
+- `botserver/PROMPT.md` - Full security guidelines
+- `botserver/src/security/` - Security module implementations
+
+### Security Modules Reference (in botserver)
+
+| Module | Purpose |
+|--------|---------|
+| `sql_guard.rs` | SQL injection prevention with table whitelist |
+| `command_guard.rs` | Command injection prevention with command whitelist |
+| `secrets.rs` | Secrets management with zeroizing memory |
+| `validation.rs` | Input validation utilities |
+| `rate_limiter.rs` | Rate limiting middleware |
+| `headers.rs` | Security headers (CSP, HSTS, X-Frame-Options) |
+| `cors.rs` | CORS configuration (no wildcard in production) |
+| `auth.rs` | Authentication & RBAC infrastructure |
+| `panic_handler.rs` | Panic catching middleware |
+| `path_guard.rs` | Path traversal protection |
+| `request_id.rs` | Request ID tracking |
+| `error_sanitizer.rs` | Error message sanitization |
+| `zitadel_auth.rs` | Zitadel authentication integration |
+
+### Desktop-Specific Security
+
+```
+❌ NEVER trust user input from IPC commands
+❌ NEVER expose filesystem paths to frontend without validation
+❌ NEVER store secrets in plain text or localStorage
+❌ NEVER disable CSP in tauri.conf.json for production
+❌ NEVER use allowlist: all in Tauri configuration
+```
+
+```rust
+// ❌ WRONG - trusting user path
+#[tauri::command]
+async fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+// ✅ CORRECT - validate and sandbox paths
+#[tauri::command]
+async fn read_file(app: tauri::AppHandle, filename: String) -> Result<String, String> {
+    let safe_name = filename
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '-')
+        .collect::<String>();
+    if safe_name.contains("..") {
+        return Err("Invalid filename".into());
+    }
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let full_path = base_dir.join(&safe_name);
+    std::fs::read_to_string(full_path).map_err(|e| e.to_string())
+}
+```
+
+### Tauri Security Checklist
+
+- [ ] Minimal `allowlist` in `tauri.conf.json`
+- [ ] CSP configured (not `null` in production)
+- [ ] No `dangerousRemoteDomainIpcAccess`
+- [ ] Validate ALL IPC command parameters
+- [ ] Use `app.path()` for sandboxed directories
+- [ ] No shell command execution from user input
+
+---
+
 ## CARGO.TOML LINT EXCEPTIONS
 
 When a clippy lint has **technical false positives** that cannot be fixed in code,
@@ -243,7 +313,7 @@ BotApp is a **Tauri-based desktop wrapper** for General Bots. It provides native
 ```
 botapp/        # THIS PROJECT - Desktop app wrapper
 botui/         # Web UI (consumed by botapp)
-botserver/     # Main server (business logic)
+botserver/     # Main server (business logic, security modules)
 botlib/        # Shared library
 botbook/       # Documentation
 ```
@@ -317,6 +387,7 @@ Business Logic + Database
 - Desktop-specific features only in botapp
 - Shared logic stays in botserver
 - Zero warnings required
+- ALL IPC inputs must be validated
 ```
 
 ### Tauri Command Pattern
@@ -329,6 +400,10 @@ pub async fn my_command(
     window: tauri::Window,
     param: String,
 ) -> Result<MyResponse, String> {
+    // Validate input first
+    if param.is_empty() || param.len() > 1000 {
+        return Err("Invalid parameter".into());
+    }
     // Implementation
     Ok(MyResponse { /* ... */ })
 }
@@ -340,7 +415,7 @@ fn main() {
             my_command,
         ])
         .run(tauri::generate_context!())
-        .expect("error running app");
+        .map_err(|e| format!("error running app: {e}"))?;
 }
 ```
 
@@ -414,7 +489,7 @@ Key settings (Tauri v2 format):
   },
   "app": {
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     },
     "windows": [{
       "title": "General Bots",
@@ -440,9 +515,10 @@ Key settings (Tauri v2 format):
 
 1. **Check if feature belongs here** - Only desktop-specific features
 2. **Add Tauri command** in `src/main.rs`
-3. **Register handler** in `tauri::Builder`
-4. **Add JS invocation** in `js/app-extensions.js`
-5. **Update UI** if needed
+3. **Validate ALL inputs** before processing
+4. **Register handler** in `tauri::Builder`
+5. **Add JS invocation** in `js/app-extensions.js`
+6. **Update UI** if needed
 
 ### Example: Add Screenshot
 
@@ -551,6 +627,7 @@ cargo test
 - **Desktop-only features** - Shared logic in botserver
 - **Tauri APIs** - No direct fs access from JS
 - **Platform abstractions** - Use cfg for platform code
-- **Security** - Minimal allowlist in tauri.conf.json
+- **Security** - Minimal allowlist in tauri.conf.json, validate ALL inputs
+- **Refer to botserver/PROMPT.md** - For comprehensive Rust security patterns
 - **Version**: Always 6.1.0 - do not change without approval
 - **Session Continuation**: When running out of context, create detailed summary: (1) what was done, (2) what remains, (3) specific files and line numbers, (4) exact next steps.

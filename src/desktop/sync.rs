@@ -1,6 +1,7 @@
+use super::safe_command::SafeCommand;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::Mutex;
 use tauri::{Emitter, Window};
 
@@ -78,8 +79,6 @@ pub fn get_sync_status() -> SyncStatus {
     }
 }
 
-/// # Errors
-/// Returns an error if sync is already running, directory creation fails, or rclone is not found.
 #[tauri::command]
 pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStatus, String> {
     let config = config.unwrap_or_default();
@@ -99,42 +98,49 @@ pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStat
             .map_err(|e| format!("Failed to create local directory: {e}"))?;
     }
 
-    let mut cmd = Command::new("rclone");
+    let remote_spec = format!("{}:{}", config.remote_name, config.remote_path);
 
-    match config.sync_mode {
-        SyncMode::Push => {
-            cmd.arg("sync");
-            cmd.arg(&config.local_path);
-            cmd.arg(format!("{}:{}", config.remote_name, config.remote_path));
-        }
-        SyncMode::Pull => {
-            cmd.arg("sync");
-            cmd.arg(format!("{}:{}", config.remote_name, config.remote_path));
-            cmd.arg(&config.local_path);
-        }
-        SyncMode::Bisync => {
-            cmd.arg("bisync");
-            cmd.arg(&config.local_path);
-            cmd.arg(format!("{}:{}", config.remote_name, config.remote_path));
-            cmd.arg("--resync");
-        }
-    }
+    let cmd_result = match config.sync_mode {
+        SyncMode::Push => SafeCommand::new("rclone")
+            .and_then(|c| c.arg("sync"))
+            .and_then(|c| c.arg(&config.local_path))
+            .and_then(|c| c.arg(&remote_spec)),
+        SyncMode::Pull => SafeCommand::new("rclone")
+            .and_then(|c| c.arg("sync"))
+            .and_then(|c| c.arg(&remote_spec))
+            .and_then(|c| c.arg(&config.local_path)),
+        SyncMode::Bisync => SafeCommand::new("rclone")
+            .and_then(|c| c.arg("bisync"))
+            .and_then(|c| c.arg(&config.local_path))
+            .and_then(|c| c.arg(&remote_spec))
+            .and_then(|c| c.arg("--resync")),
+    };
 
-    cmd.arg("--progress").arg("--verbose").arg("--checksum");
+    let mut cmd_builder = cmd_result
+        .and_then(|c| c.arg("--progress"))
+        .and_then(|c| c.arg("--verbose"))
+        .and_then(|c| c.arg("--checksum"))
+        .map_err(|e| format!("Failed to build rclone command: {e}"))?;
 
     for pattern in &config.exclude_patterns {
-        cmd.arg("--exclude").arg(pattern);
+        cmd_builder = cmd_builder
+            .arg("--exclude")
+            .and_then(|c| c.arg(pattern))
+            .map_err(|e| format!("Invalid exclude pattern: {e}"))?;
     }
 
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    let child = cmd.spawn().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            "rclone not found. Please install rclone: https://rclone.org/install/".to_string()
-        } else {
-            format!("Failed to start rclone: {e}")
-        }
-    })?;
+    let child = cmd_builder
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            let err_str = e.to_string();
+            if err_str.contains("NotFound") || err_str.contains("not found") {
+                "rclone not found. Please install rclone: https://rclone.org/install/".to_string()
+            } else {
+                format!("Failed to start rclone: {e}")
+            }
+        })?;
 
     {
         let mut process_guard = RCLONE_PROCESS
@@ -160,8 +166,6 @@ pub fn start_sync(window: Window, config: Option<SyncConfig>) -> Result<SyncStat
     })
 }
 
-/// # Errors
-/// Returns an error if no sync process is currently running.
 #[tauri::command]
 pub fn stop_sync() -> Result<SyncStatus, String> {
     let mut process_guard = RCLONE_PROCESS
@@ -188,8 +192,6 @@ pub fn stop_sync() -> Result<SyncStatus, String> {
         })
 }
 
-/// # Errors
-/// Returns an error if rclone configuration fails.
 #[tauri::command]
 pub fn configure_remote(
     remote_name: &str,
@@ -198,23 +200,22 @@ pub fn configure_remote(
     secret_key: &str,
     bucket: &str,
 ) -> Result<(), String> {
-    let output = Command::new("rclone")
-        .args([
-            "config",
-            "create",
-            remote_name,
-            "s3",
-            "provider",
-            "Minio",
-            "endpoint",
-            endpoint,
-            "access_key_id",
-            access_key,
-            "secret_access_key",
-            secret_key,
-            "acl",
-            "private",
-        ])
+    let output = SafeCommand::new("rclone")
+        .and_then(|c| c.arg("config"))
+        .and_then(|c| c.arg("create"))
+        .and_then(|c| c.arg(remote_name))
+        .and_then(|c| c.arg("s3"))
+        .and_then(|c| c.arg("provider"))
+        .and_then(|c| c.arg("Minio"))
+        .and_then(|c| c.arg("endpoint"))
+        .and_then(|c| c.arg(endpoint))
+        .and_then(|c| c.arg("access_key_id"))
+        .and_then(|c| c.arg(access_key))
+        .and_then(|c| c.arg("secret_access_key"))
+        .and_then(|c| c.arg(secret_key))
+        .and_then(|c| c.arg("acl"))
+        .and_then(|c| c.arg("private"))
+        .map_err(|e| format!("Failed to build rclone command: {e}"))?
         .output()
         .map_err(|e| format!("Failed to configure rclone: {e}"))?;
 
@@ -223,22 +224,26 @@ pub fn configure_remote(
         return Err(format!("rclone config failed: {stderr}"));
     }
 
-    let _ = Command::new("rclone")
-        .args(["config", "update", remote_name, "bucket", bucket])
-        .output();
+    let _ = SafeCommand::new("rclone")
+        .and_then(|c| c.arg("config"))
+        .and_then(|c| c.arg("update"))
+        .and_then(|c| c.arg(remote_name))
+        .and_then(|c| c.arg("bucket"))
+        .and_then(|c| c.arg(bucket))
+        .and_then(|c| c.output());
 
     Ok(())
 }
 
-/// # Errors
-/// Returns an error if rclone is not installed or the version check fails.
 #[tauri::command]
 pub fn check_rclone_installed() -> Result<String, String> {
-    let output = Command::new("rclone")
-        .arg("version")
+    let output = SafeCommand::new("rclone")
+        .and_then(|c| c.arg("version"))
+        .map_err(|e| format!("Failed to build rclone command: {e}"))?
         .output()
         .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
+            let err_str = e.to_string();
+            if err_str.contains("NotFound") || err_str.contains("not found") {
                 "rclone not installed".to_string()
             } else {
                 format!("Error checking rclone: {e}")
@@ -254,12 +259,11 @@ pub fn check_rclone_installed() -> Result<String, String> {
     }
 }
 
-/// # Errors
-/// Returns an error if listing rclone remotes fails.
 #[tauri::command]
 pub fn list_remotes() -> Result<Vec<String>, String> {
-    let output = Command::new("rclone")
-        .args(["listremotes"])
+    let output = SafeCommand::new("rclone")
+        .and_then(|c| c.arg("listremotes"))
+        .map_err(|e| format!("Failed to build rclone command: {e}"))?
         .output()
         .map_err(|e| format!("Failed to list remotes: {e}"))?;
 
@@ -284,8 +288,6 @@ pub fn get_sync_folder() -> String {
     )
 }
 
-/// # Errors
-/// Returns an error if the directory cannot be created or the path is not a directory.
 #[tauri::command]
 pub fn set_sync_folder(path: &str) -> Result<(), String> {
     let path = PathBuf::from(path);

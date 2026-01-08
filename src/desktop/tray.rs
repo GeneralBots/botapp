@@ -1,3 +1,4 @@
+use super::safe_command::SafeCommand;
 use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
@@ -44,8 +45,6 @@ impl TrayManager {
         }
     }
 
-    /// # Errors
-    /// Returns an error if the tray system fails to initialize.
     pub async fn start(&self) -> Result<()> {
         match self.running_mode {
             RunningMode::Desktop => {
@@ -119,8 +118,6 @@ impl TrayManager {
         }
     }
 
-    /// # Errors
-    /// Returns an error if the status update fails.
     pub async fn update_status(&self, status: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -132,8 +129,6 @@ impl TrayManager {
         Ok(())
     }
 
-    /// # Errors
-    /// Returns an error if setting the tooltip fails.
     pub async fn set_tooltip(&self, tooltip: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -145,8 +140,6 @@ impl TrayManager {
         Ok(())
     }
 
-    /// # Errors
-    /// Returns an error if the notification fails to display.
     pub async fn show_notification(&self, title: &str, body: &str) -> Result<()> {
         let active = self.tray_active.read().await;
         let is_active = *active;
@@ -157,19 +150,23 @@ impl TrayManager {
 
             #[cfg(target_os = "linux")]
             {
-                let _ = std::process::Command::new("notify-send")
-                    .arg(title)
-                    .arg(body)
-                    .spawn();
+                if let Ok(cmd) = SafeCommand::new("notify-send")
+                    .and_then(|c| c.arg(title))
+                    .and_then(|c| c.arg(body))
+                {
+                    let _ = cmd.spawn();
+                }
             }
 
             #[cfg(target_os = "macos")]
             {
                 let script = format!("display notification \"{body}\" with title \"{title}\"");
-                let _ = std::process::Command::new("osascript")
-                    .arg("-e")
-                    .arg(&script)
-                    .spawn();
+                if let Ok(cmd) = SafeCommand::new("osascript")
+                    .and_then(|c| c.arg("-e"))
+                    .and_then(|c| c.arg(&script))
+                {
+                    let _ = cmd.spawn();
+                }
             }
         }
         Ok(())
