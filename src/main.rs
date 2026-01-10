@@ -157,9 +157,7 @@ fn create_tray_with_mode(mode: String) -> Result<String, String> {
 }
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .init();
+    botlib::logging::init_compact_logger("info");
 
     let version = env!("CARGO_PKG_VERSION");
     info!("BotApp {version} starting...");
