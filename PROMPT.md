@@ -1,67 +1,32 @@
-# BotApp Development Prompt Guide
+# BotApp Development Guide
 
-**Version:** 6.1.0  
-**Purpose:** LLM context for BotApp desktop application development
+**Version:** 6.2.0  
+**Purpose:** Desktop application wrapper (Tauri 2)
 
 ---
 
 ## ZERO TOLERANCE POLICY
 
-**This project has the strictest code quality requirements possible.**
-
 **EVERY SINGLE WARNING MUST BE FIXED. NO EXCEPTIONS.**
 
 ---
 
-## ABSOLUTE PROHIBITIONS
+## ❌ ABSOLUTE PROHIBITIONS
 
 ```
-❌ NEVER use #![allow()] or #[allow()] in source code to silence warnings
-❌ NEVER use _ prefix for unused variables - DELETE the variable or USE it
+❌ NEVER use #![allow()] or #[allow()] in source code
+❌ NEVER use _ prefix for unused variables - DELETE or USE them
 ❌ NEVER use .unwrap() - use ? or proper error handling
 ❌ NEVER use .expect() - use ? or proper error handling  
-❌ NEVER use panic!() or unreachable!() - handle all cases
-❌ NEVER use todo!() or unimplemented!() - write real code
-❌ NEVER leave unused imports - DELETE them
-❌ NEVER leave dead code - DELETE it or IMPLEMENT it
-❌ NEVER use approximate constants (3.14159) - use std::f64::consts::PI
-❌ NEVER silence clippy in code - FIX THE CODE or configure in Cargo.toml
-❌ NEVER add comments - code must be self-documenting via types and naming
-❌ NEVER add file header comments (//! or /*!) - no module docs
-❌ NEVER add function doc comments (///) - types are the documentation
-❌ NEVER add ASCII art or banners in code
-❌ NEVER add TODO/FIXME/HACK comments - fix it or delete it
+❌ NEVER use panic!() or unreachable!()
+❌ NEVER use todo!() or unimplemented!()
+❌ NEVER leave unused imports or dead code
+❌ NEVER add comments - code must be self-documenting
 ```
 
 ---
 
-## 🔐 SECURITY REQUIREMENTS
-
-**BotApp inherits ALL security requirements from `botserver/PROMPT.md`.**
-
-For comprehensive Rust security patterns, refer to:
-- `botserver/PROMPT.md` - Full security guidelines
-- `botserver/src/security/` - Security module implementations
-
-### Security Modules Reference (in botserver)
-
-| Module | Purpose |
-|--------|---------|
-| `sql_guard.rs` | SQL injection prevention with table whitelist |
-| `command_guard.rs` | Command injection prevention with command whitelist |
-| `secrets.rs` | Secrets management with zeroizing memory |
-| `validation.rs` | Input validation utilities |
-| `rate_limiter.rs` | Rate limiting middleware |
-| `headers.rs` | Security headers (CSP, HSTS, X-Frame-Options) |
-| `cors.rs` | CORS configuration (no wildcard in production) |
-| `auth.rs` | Authentication & RBAC infrastructure |
-| `panic_handler.rs` | Panic catching middleware |
-| `path_guard.rs` | Path traversal protection |
-| `request_id.rs` | Request ID tracking |
-| `error_sanitizer.rs` | Error message sanitization |
-| `zitadel_auth.rs` | Zitadel authentication integration |
-
-### Desktop-Specific Security
+## 🔐 SECURITY - TAURI SPECIFIC
 
 ```
 ❌ NEVER trust user input from IPC commands
@@ -70,6 +35,8 @@ For comprehensive Rust security patterns, refer to:
 ❌ NEVER disable CSP in tauri.conf.json for production
 ❌ NEVER use allowlist: all in Tauri configuration
 ```
+
+### Path Validation
 
 ```rust
 // ❌ WRONG - trusting user path
@@ -94,272 +61,23 @@ async fn read_file(app: tauri::AppHandle, filename: String) -> Result<String, St
 }
 ```
 
-### Tauri Security Checklist
-
-- [ ] Minimal `allowlist` in `tauri.conf.json`
-- [ ] CSP configured (not `null` in production)
-- [ ] No `dangerousRemoteDomainIpcAccess`
-- [ ] Validate ALL IPC command parameters
-- [ ] Use `app.path()` for sandboxed directories
-- [ ] No shell command execution from user input
-
 ---
 
-## CARGO.TOML LINT EXCEPTIONS
+## 🏗️ ARCHITECTURE
 
-When a clippy lint has **technical false positives** that cannot be fixed in code,
-disable it in `Cargo.toml` with a comment explaining why:
-
-```toml
-[lints.clippy]
-# Disabled: has false positives for functions with mut self, heap types (Vec, String)
-missing_const_for_fn = "allow"
-# Disabled: Tauri commands require owned types (Window) that cannot be passed by reference
-needless_pass_by_value = "allow"
-# Disabled: transitive dependencies we cannot control
-multiple_crate_versions = "allow"
-```
-
-**Approved exceptions:**
-- `missing_const_for_fn` - false positives for `mut self`, heap types
-- `needless_pass_by_value` - Tauri/framework requirements
-- `multiple_crate_versions` - transitive dependencies
-- `future_not_send` - when async traits require non-Send futures
-
----
-
-## MANDATORY CODE PATTERNS
-
-### Error Handling - Use `?` Operator
-
-```rust
-// ❌ WRONG
-let value = something.unwrap();
-let value = something.expect("msg");
-
-// ✅ CORRECT
-let value = something?;
-let value = something.ok_or_else(|| Error::NotFound)?;
-```
-
-### Self Usage in Impl Blocks
-
-```rust
-// ❌ WRONG
-impl MyStruct {
-    fn new() -> MyStruct { MyStruct { } }
-}
-
-// ✅ CORRECT
-impl MyStruct {
-    fn new() -> Self { Self { } }
-}
-```
-
-### Format Strings - Inline Variables
-
-```rust
-// ❌ WRONG
-format!("Hello {}", name)
-
-// ✅ CORRECT
-format!("Hello {name}")
-```
-
-### Derive Eq with PartialEq
-
-```rust
-// ❌ WRONG
-#[derive(PartialEq)]
-struct MyStruct { }
-
-// ✅ CORRECT
-#[derive(PartialEq, Eq)]
-struct MyStruct { }
-```
-
-### Zero Comments Policy
-
-```rust
-// ❌ WRONG - any comments
-/// Returns the user's full name
-fn get_full_name(&self) -> String { }
-
-// Validate input before processing
-fn process(data: &str) { }
-
-//! This module handles user authentication
-
-// ✅ CORRECT - self-documenting code, no comments
-fn full_name(&self) -> String { }
-
-fn process_validated_input(data: &str) { }
-```
-
-**Why zero comments in the LLM era:**
-
-With Rust's strong type system, **zero comments** is the right approach:
-
-**Rust already provides:**
-- Type signatures = documentation
-- `Result<T, E>` = documents errors
-- `Option<T>` = documents nullability
-- Trait bounds = documents requirements
-- Expressive naming = self-documenting
-
-**LLMs can:**
-- Infer intent from code structure
-- Understand patterns without comments
-- Generate docs on-demand if needed
-
-**Comments become:**
-- Stale/wrong (code changes, comments don't)
-- Noise that obscures actual logic
-- Maintenance burden
-
-**Rust community stance:**
-- Rustdoc is for *public API* crates (libraries published to crates.io)
-- Internal/application code: types + good names > comments
-- The Rust book emphasizes "code should be self-documenting"
-
----
-
-## Weekly Maintenance - EVERY MONDAY
-
-### Package Review Checklist
-
-**Every Monday, review the following:**
-
-1. **Dependency Updates**
-   ```bash
-   cargo outdated
-   cargo audit
-   ```
-
-2. **Package Consolidation Opportunities**
-   - Check if new crates can replace custom code
-   - Look for crates that combine multiple dependencies
-   - Review `Cargo.toml` for redundant dependencies
-
-3. **Code Reduction Candidates**
-   - Custom implementations that now have crate equivalents
-   - Boilerplate that can be replaced with derive macros
-   - Tauri plugin replacements for custom code
-
-4. **Tauri Plugin Updates**
-   ```bash
-   # Check for new Tauri plugins that simplify code
-   # Review tauri-plugin-* ecosystem
-   ```
-
-### Packages to Watch
-
-| Area | Potential Packages | Purpose |
-|------|-------------------|---------|
-| Dialogs | `tauri-plugin-dialog` | Native file dialogs |
-| Notifications | `tauri-plugin-notification` | System notifications |
-| Clipboard | `tauri-plugin-clipboard` | Clipboard access |
-| Auto-update | `tauri-plugin-updater` | App updates |
-
----
-
-## Official Icons - MANDATORY
-
-**NEVER generate icons with LLM. ALWAYS use official SVG icons from assets.**
-
-Icons are stored in:
-- `botui/ui/suite/assets/icons/` - Runtime icons (source of truth)
-
-### Available App Icons
-
-| Icon | File | Usage |
-|------|------|-------|
-| Logo | `gb-logo.svg` | Main GB branding |
-| Bot | `gb-bot.svg` | Bot/assistant |
-| Analytics | `gb-analytics.svg` | Charts, dashboards |
-| Calendar | `gb-calendar.svg` | Scheduling |
-| Chat | `gb-chat.svg` | Messaging |
-| Compliance | `gb-compliance.svg` | Security |
-| Designer | `gb-designer.svg` | Workflows |
-| Drive | `gb-drive.svg` | File storage |
-| Mail | `gb-mail.svg` | Email |
-| Meet | `gb-meet.svg` | Video calls |
-| Paper | `gb-paper.svg` | Documents |
-| Research | `gb-research.svg` | Search |
-| Sources | `gb-sources.svg` | Knowledge |
-| Tasks | `gb-tasks.svg` | Task management |
-
-### Icon Guidelines
-
-- All icons use `stroke="currentColor"` for theming
-- ViewBox: `0 0 24 24`
-- Stroke width: `1.5`
-- Rounded line caps and joins
-
-**DO NOT:**
-- Generate new icons with AI/LLM
-- Use emoji or unicode symbols as icons
-- Use external icon libraries
-- Create inline SVG content
-
----
-
-## Project Overview
-
-BotApp is a **Tauri-based desktop wrapper** for General Bots. It provides native desktop experience by wrapping botui's web interface with Tauri's native window capabilities.
-
-### Workspace Position
-
-```
-botapp/        # THIS PROJECT - Desktop app wrapper
-botui/         # Web UI (consumed by botapp)
-botserver/     # Main server (business logic, security modules)
-botlib/        # Shared library
-botbook/       # Documentation
-```
-
-### What BotApp Provides
-
-- **Native Desktop Window**: Tauri-powered native application
-- **System Tray**: Background operation with tray icon
-- **File Dialogs**: Native file picker integration
-- **Desktop Notifications**: OS-level notifications
-- **Auto-Update**: Built-in update mechanism (future)
-
----
-
-## Quick Start
-
-```bash
-# Ensure botserver is running
-cd ../botserver && cargo run &
-
-# Development mode
-cd botapp
-cargo tauri dev
-
-# Production build
-cargo tauri build
-```
-
----
-
-## Architecture
-
-### Tauri Structure
+### Structure
 
 ```
 botapp/
 ├── src/
 │   └── main.rs           # Rust backend, Tauri commands
-├── ui/                   # Frontend assets
+├── ui/                   
 │   └── app-guides/       # App-specific HTML
 ├── js/
 │   └── app-extensions.js # JavaScript extensions
 ├── icons/                # App icons (all sizes)
 ├── tauri.conf.json       # Tauri configuration
-├── Cargo.toml            # Rust dependencies
-└── build.rs              # Build script
+└── Cargo.toml
 ```
 
 ### Communication Flow
@@ -376,21 +94,7 @@ Business Logic + Database
 
 ---
 
-## Code Generation Rules
-
-### CRITICAL REQUIREMENTS
-
-```
-- Tauri commands must be async-safe
-- All file operations use Tauri APIs
-- No direct filesystem access from JS
-- Desktop-specific features only in botapp
-- Shared logic stays in botserver
-- Zero warnings required
-- ALL IPC inputs must be validated
-```
-
-### Tauri Command Pattern
+## 🔧 TAURI COMMAND PATTERN
 
 ```rust
 use tauri::command;
@@ -400,15 +104,12 @@ pub async fn my_command(
     window: tauri::Window,
     param: String,
 ) -> Result<MyResponse, String> {
-    // Validate input first
     if param.is_empty() || param.len() > 1000 {
         return Err("Invalid parameter".into());
     }
-    // Implementation
     Ok(MyResponse { /* ... */ })
 }
 
-// Register in main.rs
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -422,7 +123,6 @@ fn main() {
 ### JavaScript Invocation
 
 ```javascript
-// From frontend
 const result = await window.__TAURI__.invoke('my_command', {
     param: 'value'
 });
@@ -430,18 +130,45 @@ const result = await window.__TAURI__.invoke('my_command', {
 
 ---
 
-## Feature Flags
+## 🎨 ICONS - MANDATORY
 
-```toml
-[features]
-default = ["desktop"]
-desktop = []
-desktop-tray = ["dep:ksni", "dep:trayicon"]
+**NEVER generate icons with LLM. Use official SVG icons from `botui/ui/suite/assets/icons/`**
+
+Required icon sizes in `icons/`:
+```
+icon.ico          # Windows (256x256)
+icon.icns         # macOS
+icon.png          # Linux (512x512)
+32x32.png
+128x128.png
+128x128@2x.png
 ```
 
 ---
 
-## Dependencies
+## ⚙️ CONFIGURATION (tauri.conf.json)
+
+```json
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "General Bots",
+  "version": "6.2.0",
+  "identifier": "br.com.pragmatismo.botapp",
+  "build": {
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../botui/ui/suite"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  }
+}
+```
+
+---
+
+## 📦 KEY DEPENDENCIES
 
 | Library | Version | Purpose |
 |---------|---------|---------|
@@ -454,180 +181,13 @@ desktop-tray = ["dep:ksni", "dep:trayicon"]
 
 ---
 
-## Platform-Specific Code
-
-### Unix (Linux/macOS)
-
-```rust
-#[cfg(unix)]
-use ksni;  // System tray on Linux
-```
-
-### Windows
-
-```rust
-#[cfg(windows)]
-use trayicon;  // System tray on Windows
-use image;     // Icon handling
-```
-
----
-
-## Tauri Configuration (tauri.conf.json)
-
-Key settings (Tauri v2 format):
-
-```json
-{
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "General Bots",
-  "version": "6.1.0",
-  "identifier": "br.com.pragmatismo.botapp",
-  "build": {
-    "devUrl": "http://localhost:3000",
-    "frontendDist": "../botui/ui/suite"
-  },
-  "app": {
-    "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-    },
-    "windows": [{
-      "title": "General Bots",
-      "width": 1200,
-      "height": 800,
-      "resizable": true,
-      "fullscreen": false
-    }]
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": []
-  }
-}
-```
-
----
-
-## Adding Features
-
-### Process
-
-1. **Check if feature belongs here** - Only desktop-specific features
-2. **Add Tauri command** in `src/main.rs`
-3. **Validate ALL inputs** before processing
-4. **Register handler** in `tauri::Builder`
-5. **Add JS invocation** in `js/app-extensions.js`
-6. **Update UI** if needed
-
-### Example: Add Screenshot
-
-```rust
-// src/main.rs
-#[tauri::command]
-async fn take_screenshot(window: tauri::Window) -> Result<Vec<u8>, String> {
-    // Use platform-specific screenshot API
-    Ok(screenshot_bytes)
-}
-```
-
-```javascript
-// js/app-extensions.js
-async function takeScreenshot() {
-    return await window.__TAURI__.invoke('take_screenshot');
-}
-```
-
----
-
-## Icons
-
-Required icon sizes in `icons/`:
-
-```
-icon.ico          # Windows (256x256)
-icon.icns         # macOS
-icon.png          # Linux (512x512)
-32x32.png
-128x128.png
-128x128@2x.png
-```
-
----
-
-## Building
-
-### Development
-
-```bash
-cargo tauri dev
-```
-
-### Production
-
-```bash
-# All platforms
-cargo tauri build
-
-# Specific target
-cargo tauri build --target x86_64-unknown-linux-gnu
-cargo tauri build --target x86_64-pc-windows-msvc
-cargo tauri build --target x86_64-apple-darwin
-```
-
-### Output Locations
-
-```
-target/release/bundle/
-├── deb/          # Debian package
-├── appimage/     # AppImage
-├── msi/          # Windows installer
-├── dmg/          # macOS disk image
-└── macos/        # macOS app bundle
-```
-
----
-
-## Environment Variables
-
-```bash
-BOTSERVER_URL=http://localhost:8081  # botserver location
-TAURI_DEBUG=1                         # Debug mode
-```
-
----
-
-## Testing
-
-```bash
-# Build check
-cargo build
-
-# Run dev mode
-cargo tauri dev
-
-# Run tests
-cargo test
-```
-
----
-
-## Remember
+## 🔑 REMEMBER
 
 - **ZERO WARNINGS** - Every clippy warning must be fixed
-- **ZERO COMMENTS** - No comments, no doc comments, no file headers, no ASCII art
 - **NO ALLOW IN CODE** - Never use #[allow()] in source files
-- **CARGO.TOML EXCEPTIONS OK** - Disable lints with false positives in Cargo.toml with comment
-- **NO DEAD CODE** - Delete unused code, never prefix with _
-- **NO UNWRAP/EXPECT** - Use ? operator or proper error handling
-- **INLINE FORMAT ARGS** - format!("{name}") not format!("{}", name)
-- **USE SELF** - In impl blocks, use Self not the type name
-- **DERIVE EQ** - Always derive Eq with PartialEq
-- **USE DIAGNOSTICS** - Use IDE diagnostics tool, never call cargo clippy directly
+- **NO DEAD CODE** - Delete unused code
+- **NO UNWRAP/EXPECT** - Use ? operator
+- **Security** - Minimal allowlist, validate ALL inputs
 - **Desktop-only features** - Shared logic in botserver
 - **Tauri APIs** - No direct fs access from JS
-- **Platform abstractions** - Use cfg for platform code
-- **Security** - Minimal allowlist in tauri.conf.json, validate ALL inputs
-- **Refer to botserver/PROMPT.md** - For comprehensive Rust security patterns
-- **Version**: Always 6.1.0 - do not change without approval
-- **Session Continuation**: When running out of context, create detailed summary: (1) what was done, (2) what remains, (3) specific files and line numbers, (4) exact next steps.
+- **Version 6.2.0** - do not change without approval
