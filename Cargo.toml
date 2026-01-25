@@ -13,7 +13,7 @@ categories = ["gui", "network-programming"]
 botlib = { workspace = true, features = ["http-client"] }
 
 # Tauri
-tauri = { workspace = true }
+tauri = { workspace = true, features = ["tray-icon", "image"] }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 
@@ -26,22 +26,20 @@ env_logger = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 # Unix process control
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-ksni = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
-trayicon = { workspace = true, optional = true }
 image = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
 default = ["desktop"]
-desktop = []
-desktop-tray = ["dep:ksni", "dep:trayicon"]
+desktop = ["desktop-tray"]
+desktop-tray = []
 
 [build-dependencies]
 tauri-build = { workspace = true }

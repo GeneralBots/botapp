@@ -13,8 +13,8 @@ async fn get_tray_status(tray: tauri::State<'_, TrayManager>) -> Result<bool, St
 }
 
 #[tauri::command]
-async fn start_tray(tray: tauri::State<'_, TrayManager>) -> Result<(), String> {
-    tray.start().await.map_err(|e| e.to_string())
+async fn start_tray(tray: tauri::State<'_, TrayManager>, app: tauri::AppHandle) -> Result<(), String> {
+    tray.start(&app).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -208,6 +208,7 @@ fn main() {
             info!("BotApp setup complete in {mode} mode");
 
             let tray_clone = tray.inner().clone();
+            let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 let rt = match tokio::runtime::Runtime::new() {
                     Ok(rt) => rt,
@@ -217,7 +218,7 @@ fn main() {
                     }
                 };
                 rt.block_on(async {
-                    if let Err(e) = tray_clone.start().await {
+                    if let Err(e) = tray_clone.start(&app_handle).await {
                         log::error!("Failed to start tray: {e}");
                     }
                 });

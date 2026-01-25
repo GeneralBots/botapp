@@ -3,12 +3,27 @@ use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tauri::AppHandle;
+use tauri::tray::{TrayIcon, TrayIconBuilder};
+use tauri::menu::{Menu, MenuItem};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TrayManager {
     hostname: Arc<RwLock<Option<String>>>,
     running_mode: RunningMode,
     tray_active: Arc<RwLock<bool>>,
+    #[cfg(feature = "desktop-tray")]
+    tray_handle: Arc<std::sync::Mutex<Option<TrayIcon>>>,
+}
+
+impl std::fmt::Debug for TrayManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TrayManager")
+            .field("hostname", &self.hostname)
+            .field("running_mode", &self.running_mode)
+            .field("tray_active", &self.tray_active)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +48,8 @@ impl TrayManager {
             hostname: Arc::new(RwLock::new(None)),
             running_mode: RunningMode::Desktop,
             tray_active: Arc::new(RwLock::new(false)),
+            #[cfg(feature = "desktop-tray")]
+            tray_handle: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -42,71 +59,83 @@ impl TrayManager {
             hostname: Arc::new(RwLock::new(None)),
             running_mode: mode,
             tray_active: Arc::new(RwLock::new(false)),
+            #[cfg(feature = "desktop-tray")]
+            tray_handle: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self, app: &AppHandle) -> Result<()> {
         match self.running_mode {
             RunningMode::Desktop => {
-                self.start_desktop_mode().await?;
+                self.start_desktop_mode(app).await?;
             }
             RunningMode::Server => {
                 log::info!("Running in server mode - tray icon disabled");
             }
             RunningMode::Client => {
-                self.start_client_mode().await;
+                self.start_client_mode(app).await;
             }
         }
         Ok(())
     }
 
-    async fn start_desktop_mode(&self) -> Result<()> {
+    pub async fn start_desktop_mode(&self, app: &AppHandle) -> Result<()> {
         log::info!("Starting desktop mode tray icon");
         let mut active = self.tray_active.write().await;
         *active = true;
         drop(active);
 
-        #[cfg(target_os = "linux")]
-        self.setup_linux_tray();
-
-        #[cfg(target_os = "windows")]
-        self.setup_windows_tray();
-
-        #[cfg(target_os = "macos")]
-        self.setup_macos_tray();
-
+        self.setup_tray(app);
         Ok(())
     }
 
-    async fn start_client_mode(&self) {
+    fn setup_tray(&self, app: &AppHandle) {
+        #[cfg(feature = "desktop-tray")]
+        {
+            log::info!(
+                "Initializing unified system tray via tauri::tray for mode: {:?}",
+                self.running_mode
+            );
+
+            let tray_menu = Menu::new(app).unwrap();
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).unwrap();
+            let _ = tray_menu.append(&quit_i);
+
+            // Create a simple red icon
+            let w = 32;
+            let h = 32;
+            let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+            for _ in 0..(w * h) {
+                rgba.extend_from_slice(&[255, 0, 0, 255]); // Red
+            }
+            
+            let icon = tauri::image::Image::new_owned(rgba, w, h);
+
+            let tray_builder = TrayIconBuilder::with_id("main")
+                .menu(&tray_menu)
+                .tooltip("General Bots")
+                .icon(icon);
+            
+            match tray_builder.build(app) {
+                Ok(tray) => {
+                    if let Ok(mut handle) = self.tray_handle.lock() {
+                        *handle = Some(tray);
+                        log::info!("Tray icon created successfully");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to build tray icon: {}", e);
+                }
+            }
+        }
+    }
+
+    async fn start_client_mode(&self, app: &AppHandle) {
         log::info!("Starting client mode with minimal tray");
         let mut active = self.tray_active.write().await;
         *active = true;
         drop(active);
-    }
-
-    #[cfg(target_os = "linux")]
-    fn setup_linux_tray(&self) {
-        log::info!(
-            "Initializing Linux system tray via DBus/StatusNotifierItem for mode: {:?}",
-            self.running_mode
-        );
-    }
-
-    #[cfg(target_os = "windows")]
-    fn setup_windows_tray(&self) {
-        log::info!(
-            "Initializing Windows system tray via Shell_NotifyIcon for mode: {:?}",
-            self.running_mode
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    fn setup_macos_tray(&self) {
-        log::info!(
-            "Initializing macOS menu bar via NSStatusItem for mode: {:?}",
-            self.running_mode
-        );
+        self.setup_tray(app);
     }
 
     #[must_use]
