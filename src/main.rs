@@ -160,7 +160,7 @@ fn create_tray_with_mode(mode: String) -> Result<String, String> {
 }
 
 fn main() {
-    botlib::logging::init_compact_logger("trace");
+    botlib::logging::init_compact_logger("info");
     let version = env!("CARGO_PKG_VERSION");
     info!("BotApp {version} starting...");
 
