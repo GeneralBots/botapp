@@ -13,7 +13,10 @@ async fn get_tray_status(tray: tauri::State<'_, TrayManager>) -> Result<bool, St
 }
 
 #[tauri::command]
-async fn start_tray(tray: tauri::State<'_, TrayManager>, app: tauri::AppHandle) -> Result<(), String> {
+async fn start_tray(
+    tray: tauri::State<'_, TrayManager>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     tray.start(&app).await.map_err(|e| e.to_string())
 }
 
@@ -157,8 +160,7 @@ fn create_tray_with_mode(mode: String) -> Result<String, String> {
 }
 
 fn main() {
-    botlib::logging::init_compact_logger("info");
-
+    botlib::logging::init_compact_logger("trace");
     let version = env!("CARGO_PKG_VERSION");
     info!("BotApp {version} starting...");
 
