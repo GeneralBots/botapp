@@ -272,7 +272,7 @@ impl ServiceMonitor {
                     name: "API".to_string(),
                     running: false,
                     port: 8080,
-                    url: "http://localhost:8080".to_string(),
+                    url: "http://localhost:9000".to_string(),
                 },
                 ServiceStatus {
                     name: "UI".to_string(),
