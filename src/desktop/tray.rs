@@ -1,4 +1,3 @@
-use super::safe_command::SafeCommand;
 use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
