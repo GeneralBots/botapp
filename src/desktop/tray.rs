@@ -6,6 +6,8 @@ use tauri::AppHandle;
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::menu::{Menu, MenuItem};
 
+use crate::desktop::safe_command::SafeCommand;
+
 #[derive(Clone)]
 pub struct TrayManager {
     hostname: Arc<RwLock<Option<String>>>,
