@@ -1,4 +1,3 @@
-use super::safe_command::SafeCommand;
 use anyhow::Result;
 use serde::Serialize;
 use std::sync::Arc;
@@ -6,6 +5,8 @@ use tokio::sync::RwLock;
 use tauri::AppHandle;
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::menu::{Menu, MenuItem};
+
+use crate::desktop::safe_command::SafeCommand;
 
 #[derive(Clone)]
 pub struct TrayManager {
